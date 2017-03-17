@@ -84,8 +84,15 @@ function formatSingleMed(medRows) {
 function listMedsByLabel(startKey, limit, cb) {
 
     const connection = createConnection()
+    const limitClause = limit ? '' : ' LIMIT ' + limit
 
-    connection.query('SELECT * FROM medWithIngredients ORDER BY label', function(err, data) {
+    let sql = 'SELECT m.*, concat(m.label, m.ID) as startKey FROM medWithIngredients m '
+    sql = startKey ? sql + ' WHERE concat(m.label, m.ID) > "' + startKey + '"' : sql
+    sql = sql + ' ORDER BY startKey '
+    sql = limit ? sql + ' LIMIT ' + limit : sql + ' LIMIT 10'
+    console.log("sql: ", sql)
+
+    connection.query(sql, function(err, data) {
         if (err) return cb({
             error: 'unknown',
             reason: 'unknown',
