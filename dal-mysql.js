@@ -13,12 +13,16 @@ const {
     view,
     lensIndex,
     set,
-    lensPath
+    lensPath,
+    toString,
+    lensProp
 } = require('ramda')
 
 
 var dal = {
-    getMed: getMed
+    getMed: getMed,
+    getPharmacy: getPharmacy,
+    listMedsByLabel: listMedsByLabel
 }
 
 module.exports = dal
@@ -26,11 +30,151 @@ module.exports = dal
 /////////////////////
 //   medications
 /////////////////////
-function getMed(id, callback) {
-    getDocByID('medWithIngredients', id, formatMed, function(err, res) {
-        if (err) return callback(err)
-        //callback(null, view(lensIndex(0), res))
-        callback(null, res)
+function getMed(medId, cb) {
+    // getDocByID('medWithIngredients', id, formatMed, function(err, res) {
+    //     if (err) return callback(err)
+    //     //callback(null, view(lensIndex(0), res))
+    //     callback(null, res)
+    // })
+    if (!medId) return cb({
+        error: 'missing_id',
+        reason: 'missing_id',
+        name: 'missing_id',
+        status: 400,
+        message: 'unable to retrieve medication due to missing id.'
+    })
+
+    const connection = createConnection()
+
+    connection.query('SELECT * FROM medWithIngredients WHERE ID = ?', [medId], function(err, data) {
+        if (err) return cb({
+            error: 'unknown',
+            reason: 'unknown',
+            name: 'unknown',
+            status: 500,
+            message: err.message
+        })
+        if (data.length === 0) return cb({
+            error: 'not_found',
+            reason: 'missing',
+            name: 'not_found',
+            status: 404,
+            message: 'You have attempted to retrieve a medication that is not in the database or has been deleted.'
+        })
+        cb(null, formatSingleMed(data))
+    })
+}
+
+
+function formatSingleMed(medRows) {
+    const mappedIngredients = compose(
+        map(med => med.ingredient),
+        filter(med => med.ingredient)
+    )(medRows)
+
+    return compose(
+        omit(['ID', 'ingredient']),
+        set(lensProp('ingredients'), mappedIngredients),
+        set(lensProp('_id'), toString(prop('ID', medRows[0]))),
+        set(lensProp('_rev'), ""),
+        set(lensProp('type'), "medication")
+    )(medRows[0])
+}
+
+function listMedsByLabel(startKey, limit, cb) {
+
+    const connection = createConnection()
+
+    connection.query('SELECT * FROM medWithIngredients ORDER BY label', function(err, data) {
+        if (err) return cb({
+            error: 'unknown',
+            reason: 'unknown',
+            name: 'unknown',
+            status: 500,
+            message: err.message
+        })
+        if (data.length === 0) return cb({
+            error: 'not_found',
+            reason: 'missing',
+            name: 'not_found',
+            status: 404,
+            message: 'You have attempted to retrieve medications that are not in the database.'
+        })
+        cb(null, formatMultipleMeds(data))
+    })
+}
+
+function formatMultipleMeds(meds) {
+
+    // 1) map over the incoming meds and extract the ID column value
+    // 2) use ramda's uniq() to create a unique list of primary key values
+    const IDs = compose(
+        uniq(),
+        map(med => med.ID)
+    )(meds)
+
+    // 3) map over the unique list of IDs
+    // 4) filter the incoming meds with the current id
+    // 5) format each filtered med records using formatSingleMed()
+    return map(id => compose(formatSingleMed,
+                             filter(med => med.ID === id)
+                            )(meds), IDs)
+}
+
+
+////////////////////////
+//      Patients
+///////////////////////
+
+function getPatient(patientId, cb) {
+
+}
+
+////////////////////////
+//      Pharmacy
+///////////////////////
+function getPharmacy(pharmacyId, cb) {
+
+    if (!pharmacyId) return cb({
+        error: 'missing_id',
+        reason: 'missing_id',
+        name: 'missing_id',
+        status: 400,
+        message: 'unable to retrieve data due to missing id.'
+    })
+
+    const connection = createConnection()
+
+    connection.query('SELECT * FROM pharmacy WHERE ID = ?', [pharmacyId], function(err, data) {
+        if (err) return cb({
+            error: 'unknown',
+            reason: 'unknown',
+            name: 'unknown',
+            status: 500,
+            message: err.message
+        })
+        if (data.length === 0) return cb({
+            error: 'not_found',
+            reason: 'missing',
+            name: 'not_found',
+            status: 404,
+            message: 'missing'
+        })
+
+        const typeLens = lensProp('type')
+        const revLens = lensProp('_rev')
+        const idLens = lensProp('_id')
+        let idValue = prop('ID', data[0])
+        idValue = toString(idValue)
+
+        const theResult = compose(
+            omit('ID'),
+            set(idLens, idValue),
+            set(revLens, ""),
+            set(typeLens, "pharmacy")
+        )(data[0])
+
+        cb(null, theResult)
     })
 }
 
@@ -43,9 +187,10 @@ function createConnection() {
         host: "0.0.0.0",
         user: "root",
         password: "mypassword",
-        database: "test-pharma-student"
+        database: "pharmaStudent"
     });
 }
+
 
 
 function getDocByID(tablename, id, formatter, callback) {
@@ -88,56 +233,3 @@ function getDocByID(tablename, id, formatter, callback) {
         if (err) return err;
     });
 }
-
-// function formatMed() {
-//     return compose(
-//         addMedType,
-//         convertNoSQLFormat
-//     )
-// }
-
-function formatMed(meds) {
-  // db view returns repeated meds when multiple ingredients.
-  // First, return a single med by grabbing the first med in the array.
-  //  Then, format the med to make it look like a couchdb doc.
-
-    return compose(
-        addMedType,
-        convertNoSQLFormat
-    )(view(lensIndex(0), meds))
-
-
-    //console.log("Meds from mysql",)
-
-
-
-
-
-
-
-
-
-
-    //
-    // const formattedMed = compose(
-    //     addMedType,
-    //     convertNoSQLFormat
-    // )(view(lensIndex(0), meds))
-    //
-    // // create an array of ingredients from the db view rows
-    // const ingredients = compose(
-    //     filter(med => med !== null),
-    //     map(med => path(['ingredient'], med))
-    // )(meds)
-    //
-    // // set a new ingredient property with the array of ingredients
-    // //  before returning the formatted med.
-    // return set(lensPath(['ingredient']), ingredients, formattedMed );
-}
-
-const addMedType = med => set(lensPath(['type']), 'medication', med)
-
-const convertNoSQLFormat = row => compose(
-      omit(['ID']),
-      set(lensPath(['_id']), path(['ID'], row))
-    )(row)
