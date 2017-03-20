@@ -1,5 +1,5 @@
-const mysql = require('mysql');
-
+const mysql = require('mysql')
+const moment = require('moment')
 const {
     map,
     filter,
@@ -22,7 +22,9 @@ const {
 var dal = {
     getMed: getMed,
     getPharmacy: getPharmacy,
-    listMedsByLabel: listMedsByLabel
+    listMedsByLabel: listMedsByLabel,
+    getPatient: getPatient,
+    getPatients: getPatients
 }
 
 module.exports = dal
@@ -66,30 +68,22 @@ function getMed(medId, cb) {
 }
 
 
-function formatSingleMed(medRows) {
-    const mappedIngredients = compose(
-        map(med => med.ingredient),
-        filter(med => med.ingredient)
-    )(medRows)
-
-    return compose(
-        omit(['ID', 'ingredient']),
-        set(lensProp('ingredients'), mappedIngredients),
-        set(lensProp('_id'), toString(prop('ID', medRows[0]))),
-        set(lensProp('_rev'), ""),
-        set(lensProp('type'), "medication")
-    )(medRows[0])
-}
 
 function listMedsByLabel(startKey, limit, cb) {
-
     const connection = createConnection()
-    const limitClause = limit ? '' : ' LIMIT ' + limit
+    limit = limit ? limit : 4
+    const whereClause = startKey ? " WHERE concat(m.label, m.ID) > '" + startKey + "'" : ""
 
-    let sql = 'SELECT m.*, concat(m.label, m.ID) as startKey FROM medWithIngredients m '
-    sql = startKey ? sql + ' WHERE concat(m.label, m.ID) > "' + startKey + '"' : sql
-    sql = sql + ' ORDER BY startKey '
-    sql = limit ? sql + ' LIMIT ' + limit : sql + ' LIMIT 10'
+    let sql = 'SELECT m.*, concat(m.label, m.ID) as startKey '
+    sql += ' FROM medWithIngredients m '
+    sql += ' INNER JOIN (SELECT DISTINCT ID '
+    sql += ' FROM medWithIngredients m'
+    sql += whereClause
+    sql += ' LIMIT ' + limit + ') b '
+    sql += ' ON m.ID = b.ID '
+    sql += whereClause
+    sql += ' ORDER BY startKey '
+
     console.log("sql: ", sql)
 
     connection.query(sql, function(err, data) {
@@ -111,22 +105,7 @@ function listMedsByLabel(startKey, limit, cb) {
     })
 }
 
-function formatMultipleMeds(meds) {
 
-    // 1) map over the incoming meds and extract the ID column value
-    // 2) use ramda's uniq() to create a unique list of primary key values
-    const IDs = compose(
-        uniq(),
-        map(med => med.ID)
-    )(meds)
-
-    // 3) map over the unique list of IDs
-    // 4) filter the incoming meds with the current id
-    // 5) format each filtered med records using formatSingleMed()
-    return map(id => compose(formatSingleMed,
-                             filter(med => med.ID === id)
-                            )(meds), IDs)
-}
 
 
 ////////////////////////
@@ -135,7 +114,89 @@ function formatMultipleMeds(meds) {
 
 function getPatient(patientId, cb) {
 
+    if (!patientId) return cb({
+        error: 'missing_id',
+        reason: 'missing_id',
+        name: 'missing_id',
+        status: 400,
+        message: 'unable to retrieve data due to missing id.'
+    })
+
+    const connection = createConnection()
+
+    connection.query('SELECT * FROM patientWithConditions WHERE ID = ?', [patientId], function(err, data) {
+        if (err) return cb({
+            error: 'unknown',
+            reason: 'unknown',
+            name: 'unknown',
+            status: 500,
+            message: err.message
+        })
+        if (data.length === 0) return cb({
+            error: 'not_found',
+            reason: 'missing',
+            name: 'not_found',
+            status: 404,
+            message: 'missing'
+        })
+
+
+        cb(null, formatSinglePatient(data))
+    })
 }
+
+
+// function getPatients(startKey, limit, cb) {
+//
+//     const connection = createConnection()
+//
+//     //PAGINATION FOR PATIENTS
+//     limit = limit ? limit : 5
+//     const whereClause = startKey ? " WHERE concat(p.lastName, p.ID) > '" + startKey + "'" : ""
+//
+//     let sql = 'SELECT p.*, concat(p.lastName, p.ID) as startKey '
+//     sql += ' FROM patientWithConditions p '
+//     sql += ' INNER JOIN (SELECT DISTINCT ID '
+//     sql += ' FROM patientWithConditions p'
+//     sql += whereClause
+//     sql += ' LIMIT ' + limit + ') b '
+//     sql += ' ON p.ID = b.ID '
+//     sql += whereClause
+//     sql += ' ORDER BY startKey'
+//
+//     console.log("pagination sql for patients: ", sql)
+//
+//     //PREPAGINATION
+//     //let sql = 'SELECT * FROM pharmaStudent.patientWithConditions;'
+//
+//     connection.query(sql, function(err, data) {
+//         if (err) return cb(errorMessage)
+//
+//         if (data.length === 0) return cb(noDataFound)
+//
+//         cb(null, formatMultiplePatients(data))
+//     })
+// }
+
+
+function getPatients(cb) {
+
+    const connection = createConnection()
+
+    let sql = 'SELECT * FROM pharmaStudent.patientWithConditions;'
+
+    connection.query(sql, function(err, data) {
+        if (err) return cb(errorMessage)
+
+        if (data.length === 0) return cb(noDataFound)
+
+        cb(null, formatMultiplePatients(data))
+    })
+
+}
+
+
+
 
 ////////////////////////
 //      Pharmacy
@@ -185,9 +246,80 @@ function getPharmacy(pharmacyId, cb) {
     })
 }
 
+
+
+
+
+
+
+
+
 /////////////////////
 // helper functions
 /////////////////////
+
+function formatSingleMed(medRows) {
+    const mappedIngredients = compose(
+        map(med => med.ingredient),
+        filter(med => med.ingredient)
+    )(medRows)
+
+    return compose(
+        omit(['ID', 'ingredient']),
+        set(lensProp('ingredients'), mappedIngredients),
+        set(lensProp('_id'), toString(prop('ID', medRows[0]))),
+        set(lensProp('_rev'), ""),
+        set(lensProp('type'), "medication")
+    )(medRows[0])
+}
+
+function formatMultipleMeds(meds) {
+    // 1) map over the incoming meds and extract the ID column value
+    // map(med => med.ID, meds)
+    // 2) use ramda's uniq() to create a unique list of primary key values
+    const IDs = compose(uniq, map(med => med.ID))(meds)
+
+    // 3) map over the unique list of IDs
+    // 4) compose and
+    //    a) filter the incoming meds with the current id
+    //    b) format each filtered med records using formatSingleMed()
+    return map(id => compose(
+        formatSingleMed,
+        filter(med => med.ID === id)
+    )(meds))(IDs)
+}
+
+
+
+function formatSinglePatient(patientRows) {
+    const mappedConditions = compose(
+        map(patient => patient.condition),
+        filter(patient => patient.condition)
+    )(patientRows)
+
+    return compose(
+        set(lensProp('birthdate'), moment(prop('birthdate', patientRows[0])).format("YYYY-MM-DD")),
+        set(lensProp('conditions'), mappedConditions),
+        omit(['ID', 'condition']),
+        set(lensProp('_id'), toString(prop('ID', patientRows[0]))),
+        set(lensProp('_rev'), ""),
+        set(lensProp('type'), "patient")
+    )(patientRows[0])
+}
+
+function formatMultiplePatients(patients) {
+    const IDs = compose(
+        uniq(),
+        map(patient => patient.ID)
+    )(patients)
+
+    return map(id => compose(
+        formatSinglePatient,
+        filter(patient => patient.ID === id)
+    )(patients))(IDs)
+}
+
+
 
 function createConnection() {
     return mysql.createConnection({
@@ -197,8 +329,6 @@ function createConnection() {
         database: "pharmaStudent"
     });
 }
-
-
 
 function getDocByID(tablename, id, formatter, callback) {
     //  console.log("getDocByID", tablename, id)

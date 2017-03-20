@@ -4,18 +4,18 @@ CREATE DATABASE pharmaStudent;
 
 USE pharmaStudent;
 
-CREATE TABLE `pharmacy` (
-  `ID` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `storeNumber` varchar(6) NOT NULL,
-  `storeChainName` varchar(25) NOT NULL DEFAULT 'CVS',
-  `storeName` varchar(50) NOT NULL,
-  `streetAddress` varchar(100) NOT NULL,
-  `phone` varchar(12) NOT NULL,
-  `city` varchar(25) NOT NULL,
-  `state` char(2) NOT NULL,
-  `zip` char(5) NOT NULL,
-  PRIMARY KEY (`ID`),
-  UNIQUE KEY `storeNumber_UNIQUE` (`storeNumber`)
+CREATE TABLE pharmacy (
+  ID int(10) unsigned NOT NULL AUTO_INCREMENT,
+  storeNumber varchar(6) NOT NULL,
+  storeChainName varchar(25) NOT NULL DEFAULT 'CVS',
+  storeName varchar(50) NOT NULL,
+  streetAddress varchar(100) NOT NULL,
+  phone varchar(12) NOT NULL,
+  city varchar(25) NOT NULL,
+  state char(2) NOT NULL,
+  zip char(5) NOT NULL,
+  PRIMARY KEY (ID),
+  UNIQUE KEY storeNumber_UNIQUE (storeNumber)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=latin1;
 
 INSERT INTO pharmacy
@@ -28,17 +28,17 @@ VALUES
 , ('3030', 'Walmart', 'Walmart 3030 Hwy 51 ', '123 Hwy 51', '843 212-2343', 'Goose Creek', 'SC', '29456');
 
 
-CREATE TABLE `patient` (
-  `ID` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `patientNumber` varchar(6) NOT NULL,
-  `firstName` varchar(25) NOT NULL,
-  `lastName` varchar(50) NOT NULL,
-  `birthdate` date NOT NULL,
-  `gender` char(1) NOT NULL,
-  `ethnicity` varchar(2) NOT NULL,
-  `last4SSN` char(4) NOT NULL DEFAULT '-1',
-  PRIMARY KEY (`ID`),
-  UNIQUE KEY `patientNumber_UNIQUE` (`patientNumber`)
+CREATE TABLE patient (
+  ID int(10) unsigned NOT NULL AUTO_INCREMENT,
+  patientNumber varchar(6) NOT NULL,
+  firstName varchar(25) NOT NULL,
+  lastName varchar(50) NOT NULL,
+  birthdate date NOT NULL,
+  gender char(1) NOT NULL,
+  ethnicity varchar(2) NOT NULL,
+  last4SSN char(4) NOT NULL DEFAULT '-1',
+  PRIMARY KEY (ID),
+  UNIQUE KEY patientNumber_UNIQUE (patientNumber)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 
@@ -51,17 +51,17 @@ VALUES
 , ('103', 'Steve', 'Perry', '1956-05-11', 'M', 'W', "2321")
 , ('104', 'Collins', 'Bootsy', '1952-06-11', 'M', 'AA', "3982");
 
-CREATE TABLE `patientCondition` (
-  `ID` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `patientID` int(10) unsigned NOT NULL,
-  `condition` varchar(50) NOT NULL,
-  PRIMARY KEY (`ID`),
-  KEY `FK_patientCondition_patientID_idx` (`patientID`),
-  CONSTRAINT `FK_patientCondition_patientID` FOREIGN KEY (`patientID`) REFERENCES `patient` (`ID`) ON DELETE CASCADE ON UPDATE CASCADE
+CREATE TABLE patientCondition (
+  ID int(10) unsigned NOT NULL AUTO_INCREMENT,
+  patientID int(10) unsigned NOT NULL,
+  condition varchar(50) NOT NULL,
+  PRIMARY KEY (ID),
+  KEY FK_patientCondition_patientID_idx (patientID),
+  CONSTRAINT FK_patientCondition_patientID FOREIGN KEY (patientID) REFERENCES patient (ID) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 INSERT INTO patientCondition
-(patientID, `condition`)
+(patientID, condition)
 VALUES
 (5, 'hypertension')
 , (5, 'diabeties')
@@ -121,3 +121,17 @@ SELECT m.ID AS ID
 ,mi.ingredient AS ingredient
 FROM med m
 LEFT JOIN medIngredient mi on m.ID = mi.medID;
+
+
+CREATE VIEW patientWithConditions AS
+SELECT p.ID AS ID
+,p.patientNumber AS patientNumber
+,p.firstName AS firstName
+,p.lastName AS lastName
+,p.birthdate AS birthdate
+,p.gender AS gender
+,p.ethnicity AS ethnicity
+,p.last4SSN AS last4SSN
+,pc.condition AS `condition`
+FROM patient p
+  LEFT JOIN patientCondition pc on p.ID = pc.patientID;
