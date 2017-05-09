@@ -28,10 +28,18 @@ function addMed(med, cb) {
 	let newId = 'medication_' + med.label.toLowerCase()
 	med._id = prepID(newId)
 
-	db.put(med, function(err, res) {
-		if (err) return cb(err)
-		cb(null, res)
-	})
+	checkRequiredMedInputs(med)
+		? db.put(med, function(err, res) {
+				if (err) return cb(err)
+				cb(null, res)
+			})
+		: cb({
+				error: 'bad_request',
+				reason: 'bad_request',
+				name: 'bad_request',
+				status: '400',
+				message: 'need all required inputs...'
+			})
 }
 
 function getMed(medId, cb) {
@@ -210,22 +218,23 @@ function listPharmacies(startKey, limit, cb) {
 //    patients
 /////////////////////
 
-function getUniqueConditions(cb) {
-	db.query('patientsByCondition', null, function(err, res) {
-		if (err) return cb12(err)
-		cb(null, uniq(map(row => row.key, res.rows)))
-	})
-}
-
 function addPatient(patient, cb) {
 	patient.type = 'patient'
 	let newId = `patient_${patient.lastName.toLowerCase()}_${patient.firstName.toLowerCase()}_${patient.last4SSN}_${patient.patientNumber}`
 	patient._id = prepID(newId)
 
-	db.put(patient, function(err, res) {
-		if (err) return cb7(err)
-		cb(null, res)
-	})
+	checkRequiredPatientInputs(patient)
+		? db.put(patient, function(err, res) {
+				if (err) return cb(err)
+				cb(null, res)
+			})
+		: cb({
+				error: 'bad_request',
+				reason: 'bad_request',
+				name: 'bad_request',
+				status: '400',
+				message: 'need all required inputs...'
+			})
 }
 
 function getPatient(patientId, cb) {
@@ -261,7 +270,7 @@ function getPatients(cb) {
 			end_key: 'patient_\uffff'
 		},
 		function(err, res) {
-			if (err) return cb8(err)
+			if (err) return cb(err)
 			cb(null, map(obj => omit('type', obj.doc), res.rows))
 		}
 	)
@@ -329,6 +338,27 @@ function checkRequiredInputs(doc) {
 		prop('storeName', doc) &&
 		prop('streetAddress', doc) &&
 		prop('phone', doc)
+	)
+}
+
+function checkRequiredPatientInputs(doc) {
+	return (
+		prop('firstName', doc) &&
+		prop('lastName', doc) &&
+		prop('birthdate', doc) &&
+		prop('gender', doc) &&
+		prop('ethnicity', doc) &&
+		prop('last4SSN', doc)
+	)
+}
+
+function checkRequiredMedInputs(doc) {
+	return (
+		prop('label', doc) &&
+		prop('type', doc) &&
+		prop('amount', doc) &&
+		prop('unit', doc) &&
+		prop('form', doc)
 	)
 }
 
