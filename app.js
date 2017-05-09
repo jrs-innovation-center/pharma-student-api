@@ -3,28 +3,32 @@ const app = express()
 const dalModule = process.env.DAL || 'nosql';
 const dal = dalModule === 'nosql' ? 'dal.js' : 'dal-mysql.js'
 const {
-    getMed,
     getUniqueForms,
-    listMedsByLabel,
     getUniqueIngredients,
+    addMed,
+    getMed,
+    updateMed,
+    deleteMed,
+    listMedsByLabel,
     listMedsByIngredient,
     listMedsByForm,
-    updatePharmacy,
+
     addPharmacy,
     getPharmacy,
-    listPharmacies,
+    updatePharmacy,
     deletePharmacy,
-    addPatient,
-    getPatients,
-    listPatientsByLastName,
+    listPharmacies,
+    listPharmaciesByChainName,
+    listPharmaciesByStoreName,
+
     getUniqueConditions,
-    listPatientsByCondition,
+    addPatient,
+    getPatient,
     updatePatient,
     deletePatient,
-    getPatient,
-    addMed,
-    updateMed,
-    deleteMed
+    getPatients,
+    listPatientsByLastName,
+    listPatientsByCondition,
 } = require('./' + dal)
 
 const {
