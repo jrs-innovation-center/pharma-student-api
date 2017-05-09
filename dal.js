@@ -218,6 +218,13 @@ function listPharmacies(startKey, limit, cb) {
 //    patients
 /////////////////////
 
+function getUniqueConditions(cb) {
+	db.query('patientsByCondition', null, function(err, res) {
+		if (err) return cb12(err)
+		cb(null, uniq(map(row => row.key, res.rows)))
+	})
+}
+
 function addPatient(patient, cb) {
 	patient.type = 'patient'
 	let newId = `patient_${patient.lastName.toLowerCase()}_${patient.firstName.toLowerCase()}_${patient.last4SSN}_${patient.patientNumber}`
@@ -348,7 +355,8 @@ function checkRequiredPatientInputs(doc) {
 		prop('birthdate', doc) &&
 		prop('gender', doc) &&
 		prop('ethnicity', doc) &&
-		prop('last4SSN', doc)
+		prop('last4SSN', doc) &&
+		prop('patientNumber', doc)
 	)
 }
 
