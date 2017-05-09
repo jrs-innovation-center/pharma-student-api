@@ -15,16 +15,23 @@ const {
     set,
     lensPath,
     toString,
-    lensProp
+    lensProp,
+    allPass,
+    pickAll
 } = require('ramda')
 
 
 var dal = {
     getMed: getMed,
     getPharmacy: getPharmacy,
-    listMedsByLabel: listMedsByLabel,
     getPatient: getPatient,
-    getPatients: getPatients
+
+    listMedsByLabel: listMedsByLabel,
+    listPharmacies: listPharmacies,
+    getPatients: getPatients,
+
+    addPharmacy: addPharmacy,
+    addMed: addMed
 }
 
 module.exports = dal
@@ -49,6 +56,11 @@ function getMed(medId, cb) {
     const connection = createConnection()
 
     connection.query('SELECT * FROM medWithIngredients WHERE ID = ?', [medId], function(err, data) {
+
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
         if (err) return cb({
             error: 'unknown',
             reason: 'unknown',
@@ -66,8 +78,6 @@ function getMed(medId, cb) {
         cb(null, formatSingleMed(data))
     })
 }
-
-
 
 function listMedsByLabel(startKey, limit, cb) {
     const connection = createConnection()
@@ -87,6 +97,11 @@ function listMedsByLabel(startKey, limit, cb) {
     console.log("sql: ", sql)
 
     connection.query(sql, function(err, data) {
+
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
         if (err) return cb({
             error: 'unknown',
             reason: 'unknown',
@@ -104,6 +119,111 @@ function listMedsByLabel(startKey, limit, cb) {
         cb(null, formatMultipleMeds(data))
     })
 }
+
+function addMed(med, cb) {
+    // TODO:  4) make sure all required exist for ingredient.
+    // TODO:  5) clean the ingredients before insert.
+    // TODO:  6) insert ingredients using the pk (insertId) value from med as the fk value
+    if (!checkRequiredFieldsMeds(med)) {
+        return cb({
+            error: 'missing_required_fields',
+            reason: 'missing_required_fields',
+            name: 'missing_required_fields',
+            status: 400,
+            message: 'Missing required fields.  Please see documentation for details: https://github.com/jrs-innovation-center/pharma-student-api/tree/master#medications.'
+        })
+    }
+    const connection = createConnection()
+    connection.beginTransaction(function(err) {
+        if (err) {
+            connection.end()
+            cb(err)
+        }
+        connection.query('INSERT INTO med SET ? ', prepMedDataForDB(med), function(err, newMed) {
+
+            if (err) {
+                return connection.rollback(function() {
+                    connection.end()
+                    cb(err)
+                });
+            }
+
+            if (path(['insertId'], newMed)) {
+                //console.log("prep", prepIngredients(path(['insertId'], newMed), path(['ingredients'], med))
+
+
+                connection.query('INSERT INTO medIngredient (medID, ingredient) VALUES ? ', prepIngredients(path(['insertId'], newMed), path(['ingredients'], med)), function(err, result) {
+                    if (err) {
+                        return connection.rollback(function() {
+                            connection.end();
+                            cb(err);
+                        });
+                    }
+                    if (result) {
+                        connection.commit(function(err) {
+                            if (err) {
+                                return connection.rollback(function() {
+                                    connection.end()
+                                    cb(err)
+                                })
+                            }
+                            connection.end()
+                            return cb(null, {
+                                ok: true,
+                                id: path(['insertId'], newMed)
+                            })
+                        });
+
+                    }
+
+
+
+                })
+
+
+            }
+
+        })
+
+
+
+
+
+
+    })
+
+
+}
+
+function checkRequiredFieldsMeds(med) {
+
+    //   {
+    //   "name": "Lortab",
+    //   "label": "Lortab 100mg tablet",
+    //   "amount": 100,
+    //   "unit": "mg",
+    //   "form": "tablet",
+    //   "type": "medication",
+    //   "ingredients": [
+    //     "acetaminophen",
+    //     "hydrocodone"
+    //   ]
+    // }
+    return allPass([prop('name'),
+        prop('label'),
+        prop('amount'),
+        prop('unit'),
+        prop('form'),
+        prop('ingredients')
+    ])(med)
+}
+
+function prepMedDataForDB(med) {
+    return pickAll(['name', 'label', 'amount', 'unit', 'form'], med)
+}
+
+
+
 
 
 
@@ -125,6 +245,11 @@ function getPatient(patientId, cb) {
     const connection = createConnection()
 
     connection.query('SELECT * FROM patientWithConditions WHERE ID = ?', [patientId], function(err, data) {
+
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
         if (err) return cb({
             error: 'unknown',
             reason: 'unknown',
@@ -139,9 +264,22 @@ function getPatient(patientId, cb) {
             status: 404,
             message: 'missing'
         })
-
-
         cb(null, formatSinglePatient(data))
+    })
+}
+
+function getPatients(cb) {
+    const connection = createConnection()
+    let sql = 'SELECT * FROM pharmaStudent.patientWithConditions;'
+    connection.query(sql, function(err, data) {
+
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
+        if (err) return cb(errorMessage)
+        if (data.length === 0) return cb(noDataFound)
+        cb(null, formatMultiplePatients(data))
     })
 }
 
@@ -179,21 +317,9 @@ function getPatient(patientId, cb) {
 // }
 
 
-function getPatients(cb) {
 
-    const connection = createConnection()
 
-    let sql = 'SELECT * FROM pharmaStudent.patientWithConditions;'
 
-    connection.query(sql, function(err, data) {
-        if (err) return cb(errorMessage)
-
-        if (data.length === 0) return cb(noDataFound)
-
-        cb(null, formatMultiplePatients(data))
-    })
-
-}
 
 
 
@@ -214,6 +340,10 @@ function getPharmacy(pharmacyId, cb) {
     const connection = createConnection()
 
     connection.query('SELECT * FROM pharmacy WHERE ID = ?', [pharmacyId], function(err, data) {
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
         if (err) return cb({
             error: 'unknown',
             reason: 'unknown',
@@ -246,7 +376,63 @@ function getPharmacy(pharmacyId, cb) {
     })
 }
 
+function listPharmacies(startKey, limit, cb) {
+    const connection = createConnection()
 
+    limit = limit ? limit : 3
+
+    const whereClause = startKey ? " WHERE concat(p.storeChainName, p.ID) > '" + startKey + "'" : ''
+
+    let sql = 'SELECT p.*, concat(p.storeChainName, p.ID) as startKey'
+    sql += ' FROM pharmacy p '
+    sql += whereClause
+    sql += ' LIMIT ' + limit
+
+
+    connection.query(sql, function(err, data) {
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+        if (err) return cb(errorMessage)
+        if (data.length === 0) return cb(noDataFound)
+        cb(null, formatMultiplePharmacies(data))
+    })
+
+
+}
+
+
+function addPharmacy(data, cb) {
+
+    if (!checkRequiredFieldsPharmacy(data)) return cb({
+        error: 'missing_required_fields',
+        reason: 'missing_required_fields',
+        name: 'missing_required_fields',
+        status: 400,
+        message: 'Missing required fields.  Please see documentation for details: https://github.com/jrs-innovation-center/pharma-student-api/tree/master#pharmacies.'
+    })
+
+    var connection = createConnection()
+    connection.query('INSERT INTO pharmacy SET ? ', prepPharmacyDataForDB(data), function(err, result) {
+
+        connection.end(function(err) {
+            if (err) return cb(err);
+        })
+
+        if (err) return cb(err)
+        //Use path instead of dot notation for insertId
+
+
+        if (path(['insertId'], result)) {
+            return cb(null, {
+                ok: true,
+                id: path(['insertId'], result)
+            })
+        }
+    })
+
+
+}
 
 
 
@@ -278,7 +464,6 @@ function formatMultipleMeds(meds) {
     // map(med => med.ID, meds)
     // 2) use ramda's uniq() to create a unique list of primary key values
     const IDs = compose(uniq, map(med => med.ID))(meds)
-
     // 3) map over the unique list of IDs
     // 4) compose and
     //    a) filter the incoming meds with the current id
@@ -288,8 +473,6 @@ function formatMultipleMeds(meds) {
         filter(med => med.ID === id)
     )(meds))(IDs)
 }
-
-
 
 function formatSinglePatient(patientRows) {
     const mappedConditions = compose(
@@ -319,7 +502,33 @@ function formatMultiplePatients(patients) {
     )(patients))(IDs)
 }
 
+function formatMultiplePharmacies(pharmacies) {
+    const IDs = map(pharmacy => pharmacy.ID)(pharmacies)
 
+    return map(id => compose(
+        formatSinglePharmacy,
+        filter(pharmacy => pharmacy.ID === id)
+    )(pharmacies))(IDs)
+}
+
+function formatSinglePharmacy(pharmacyRow) {
+    return compose(
+        omit('ID'),
+        set(lensProp('_id'), toString(prop('ID', pharmacyRow[0]))),
+        set(lensProp('_rev'), ""),
+        set(lensProp('type'), "pharmacy")
+    )(pharmacyRow[0])
+}
+
+function prepPharmacyDataForDB(data) {
+    // remove any unnecessary properties
+    return pickAll(['storeNumber', 'storeChainName', 'storeName', 'streetAddress', 'phone', 'city', 'state', 'zip'])(data)
+}
+
+function checkRequiredFieldsPharmacy(data) {
+    // Make sure all the pharmacy fields are present, return true or false
+    return allPass([prop('storeNumber'), prop('storeChainName'), prop('storeName'), prop('phone'), prop('city'), prop('state'), prop('zip')])(data)
+}
 
 function createConnection() {
     return mysql.createConnection({
@@ -343,6 +552,11 @@ function getDocByID(tablename, id, formatter, callback) {
     var connection = createConnection()
 
     connection.query('SELECT * FROM ' + connection.escapeId(tablename) + ' WHERE id = ?', [id], function(err, data) {
+
+        connection.end(function(err) {
+            if (err) return err;
+        })
+
         if (err) return callback({
             error: 'unknown',
             reason: 'unknown',
@@ -365,8 +579,19 @@ function getDocByID(tablename, id, formatter, callback) {
             // then take result of converting the person and parseToJSON
             return callback(null, formatter(data))
         }
-    });
-    connection.end(function(err) {
-        if (err) return err;
-    });
+    })
+
+}
+
+
+
+function prepIngredients(medID, ingredients) {
+
+    //let masterArray = []
+
+    function createIngredientArray(ingredient) {
+        return [medID, ingredient]
+    }
+
+    return [map(createIngredientArray)(ingredients)]
 }

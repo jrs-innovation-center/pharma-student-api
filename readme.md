@@ -423,7 +423,6 @@ Creates a pharmacy by providing a new pharmacy as JSON in the request body:
 
 **Response `201`**
 
-
 <pre><code>
 {
   "ok": true,
